@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bill Splitter & Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <style>
+        body { font-family: 'Sarabun', sans-serif; -webkit-font-smoothing: antialiased; }
+        
+        /* Animation การสลับหน้า */
+        .page-section { display: none; animation: fadeIn 0.3s ease-out; }
+        .active-page { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* การแสดงผลบนมือถือ */
+        input, button { touch-action: manipulation; } /* ป้องกันการ delay เมื่อแตะบนมือถือ */
+        
+        /* Loading Overlay */
+        #loading-overlay { display: none; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-10">
+
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center text-white">
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-white mb-2"></div>
+        <p>กำลังสร้างรูปภาพ...</p>
+    </div>
+
+    <div class="sticky top-0 z-40 bg-white shadow-sm mb-4">
+        <div class="max-w-md mx-auto p-3 flex justify-between items-center">
+            <h1 class="font-bold text-blue-600 text-lg">💸 Bill Splitter</h1>
+            <div class="space-x-2 text-xs font-bold">
+                <button onclick="switchPage('calculator')" id="nav-calc" class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-600">คำนวณ</button>
+                <button onclick="switchPage('receipt')" id="nav-receipt" class="px-3 py-1.5 rounded-full text-gray-500">บิล</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-md mx-auto px-4">
+        
+        <section id="calculator-view" class="page-section active-page space-y-4">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="font-bold text-gray-800">📦 รายการที่จ่าย (Items)</h2>
+                    <span class="text-xs text-gray-400">รวม: <span id="calc-total-display" class="font-bold text-blue-600">0</span> บาท</span>
+                </div>
+                <div id="calc-items-container" class="space-y-2 mb-3"></div>
+                <button onclick="addCalcItem()" class="w-full py-2 border-2 border-dashed border-blue-200 text-blue-500 rounded-lg text-sm font-bold hover:bg-blue-50">+ เพิ่มรายการ</button>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="font-bold text-gray-800">👥 เพื่อนที่หาร (Friends)</h2>
+                    <span class="text-xs text-gray-400">ตกคนละ: <span id="calc-avg-display" class="font-bold text-green-600">0</span> บาท</span>
+                </div>
+                <div id="friends-container" class="space-y-2 mb-3"></div>
+                <button onclick="addFriend()" class="w-full py-2 border-2 border-dashed border-green-200 text-green-500 rounded-lg text-sm font-bold hover:bg-green-50">+ เพิ่มเพื่อน</button>
+            </div>
+
+            <div class="pt-2 pb-6 space-y-3">
+                <button onclick="createGroupBill()" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg transform active:scale-95 transition flex justify-center items-center gap-2">
+                    📄 สร้างบิลรวม (แจ้งกลุ่ม)
+                    <span class="bg-white bg-opacity-20 text-[10px] px-2 py-0.5 rounded-full">แนะนำ</span>
+                </button>
+                
+                <p class="text-center text-xs text-gray-400 font-medium my-2">- หรือเลือกออกบิลทีละคน -</p>
+                
+                <div id="individual-buttons" class="grid grid-cols-2 gap-2">
+                    </div>
+            </div>
+        </section>
+
+
+        <section id="receipt-view" class="page-section">
+            
+            <button onclick="switchPage('calculator')" class="mb-4 text-sm text-gray-500 flex items-center gap-1 hover:text-gray-800">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                กลับไปหน้าคำนวณ
+            </button>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border border-gray-100">
+                <h3 class="text-sm font-bold text-gray-700 mb-2">⚙️ ตั้งค่าผู้รับเงิน</h3>
+                <div class="grid grid-cols-1 gap-2">
+                    <input type="text" id="input-biller" class="border rounded px-3 py-2 text-sm w-full" placeholder="ชื่อผู้รับเงิน" value="" oninput="refreshReceiptUI()">
+                    <input type="text" id="input-pp-id" class="border rounded px-3 py-2 text-sm w-full bg-yellow-50" placeholder="เลขบัตรปชช หรือ เลขบัญชี หรือ เบอร์พร้อมเพย์" oninput="refreshReceiptUI()">
+                    <input type="date" id="input-date" class="border rounded px-3 py-2 text-sm w-full" oninput="refreshReceiptUI()">
+                </div>
+            </div>
+
+            <div class="flex justify-center mb-6">
+                <div id="receipt-wrapper" class="w-full bg-gray-200 p-2 rounded-xl overflow-hidden"> 
+                    <div id="receipt-paper" class="bg-white p-6 rounded-lg shadow-sm relative">
+                        
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-800 tracking-tight">INVOICE</h2>
+                                <p class="text-[10px] text-gray-400 uppercase tracking-widest">Receipt / Bill</p>
+                            </div>
+                            <div class="text-right">
+                                <div id="display-date" class="font-bold text-gray-600 text-sm">DD/MM/YY</div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-dashed border-gray-200 py-3 mb-4 text-sm">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-500">ผู้รับเงิน:</span>
+                                <span id="display-biller" class="font-bold text-gray-800">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">เรียกเก็บ:</span>
+                                <span id="display-target" class="font-bold text-blue-600">-</span>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <table class="w-full text-sm">
+                                <thead class="border-b-2 border-gray-100 text-gray-500 text-xs">
+                                    <tr>
+                                        <th class="text-left py-2">รายการ</th>
+                                        <th class="text-right py-2">จำนวนเงิน</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="display-items" class="text-gray-700">
+                                    </tbody>
+                                <tfoot class="border-t-2 border-gray-800">
+                                    <tr class="text-lg font-bold">
+                                        <td class="pt-3 text-right text-gray-800 pr-4 text-xs align-middle">ยอดรวมที่ต้องโอน</td>
+                                        <td class="pt-3 text-right text-blue-600"><span id="display-total">0</span> ฿</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center">
+                            <p class="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wide">Scan to Pay</p>
+                            
+                            <div id="qrcode-container" class="bg-white p-1.5 border rounded mb-2 hidden"></div>
+                            <div id="qr-placeholder" class="w-24 h-24 bg-gray-200 rounded flex items-center justify-center text-[10px] text-gray-400 text-center px-1">
+                                ใส่เบอร์ PromptPay<br>เพื่อสร้าง QR
+                            </div>
+
+                            <div class="text-center">
+                                <p class="text-[10px] text-gray-500">PromptPay: <span id="display-pp-id">-</span></p>
+                                <p class="text-[10px] text-gray-500 mt-0.5" id="qr-amount-hint">ยอดโอน: <span id="display-qr-amount">0</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 text-center">
+                            <div class="text-[10px] text-gray-300">Generated by Bill Splitter</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-3 pb-8">
+                <button onclick="downloadReceiptAsImage()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg flex justify-center items-center gap-2">
+                    💾 บันทึกเป็นรูปภาพ (Save Image)
+                </button>
+            </div>
+
+        </section>
+    </div>
+
+    <script>
+        // --- State Data ---
+        let items = [{ name: 'ค่าอาหาร', price: 850 }, { name: 'น้ำดื่ม', price: 60 }];
+        let friends = ['ฉัน', 'บอส', 'จอย'];
+        
+        let billData = {
+            type: 'individual', // 'individual' or 'group'
+            targetName: '',
+            itemsToDisplay: [],
+            totalAmount: 0,
+            qrAmount: 0
+        };
+
+        // --- Init ---
+        document.getElementById('input-date').valueAsDate = new Date();
+        renderCalculator();
+
+        // --- Navigation ---
+        function switchPage(page) {
+            document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active-page'));
+            document.getElementById(page + '-view').classList.add('active-page');
+            
+            // Update Menu Style
+            const btnCalc = document.getElementById('nav-calc');
+            const btnReceipt = document.getElementById('nav-receipt');
+            if(page === 'calculator') {
+                btnCalc.className = "px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 shadow-sm";
+                btnReceipt.className = "px-3 py-1.5 rounded-full text-gray-500";
+            } else {
+                btnCalc.className = "px-3 py-1.5 rounded-full text-gray-500";
+                btnReceipt.className = "px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 shadow-sm";
+            }
+        }
+
+        // --- Calculator Logic ---
+        function renderCalculator() {
+            // Render Items
+            const itemContainer = document.getElementById('calc-items-container');
+            itemContainer.innerHTML = '';
+            items.forEach((item, idx) => {
+                itemContainer.innerHTML += `
+                    <div class="flex gap-2">
+                        <input type="text" class="flex-grow border border-gray-200 rounded px-2 py-1.5 text-sm" placeholder="ชื่อรายการ" value="${item.name}" oninput="items[${idx}].name=this.value">
+                        <input type="number" class="w-20 border border-gray-200 rounded px-2 py-1.5 text-sm text-right" placeholder="0" value="${item.price}" oninput="updatePrice(${idx}, this.value)">
+                        <button onclick="removeCalcItem(${idx})" class="text-red-400 hover:text-red-600 px-1">✕</button>
+                    </div>
+                `;
+            });
+
+            // Render Friends
+            const friendContainer = document.getElementById('friends-container');
+            friendContainer.innerHTML = '';
+            friends.forEach((friend, idx) => {
+                friendContainer.innerHTML += `
+                    <div class="flex gap-2">
+                        <input type="text" class="flex-grow border border-gray-200 rounded px-2 py-1.5 text-sm" placeholder="ชื่อเพื่อน" value="${friend}" oninput="updateFriend(${idx}, this.value)">
+                        <button onclick="removeFriend(${idx})" class="text-red-400 hover:text-red-600 px-1">✕</button>
+                    </div>
+                `;
+            });
+
+            calculateAndRenderButtons();
+        }
+
+        function updatePrice(idx, val) { items[idx].price = parseFloat(val) || 0; calculateAndRenderButtons(); }
+        function addCalcItem() { items.push({name:'', price:0}); renderCalculator(); }
+        function removeCalcItem(idx) { items.splice(idx, 1); renderCalculator(); }
+        
+        function updateFriend(idx, val) { friends[idx] = val; calculateAndRenderButtons(); }
+        function addFriend() { friends.push(`เพื่อน ${friends.length + 1}`); renderCalculator(); }
+        function removeFriend(idx) { friends.splice(idx, 1); renderCalculator(); }
+
+        function calculateAndRenderButtons() {
+            const total = items.reduce((sum, item) => sum + item.price, 0);
+            const count = friends.length || 1;
+            const avg = total / count;
+
+            document.getElementById('calc-total-display').innerText = total.toLocaleString();
+            document.getElementById('calc-avg-display').innerText = avg.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2});
+
+            // สร้างปุ่มเพื่อนแต่ละคน
+            const btnContainer = document.getElementById('individual-buttons');
+            btnContainer.innerHTML = '';
+            friends.forEach((friend, idx) => {
+                btnContainer.innerHTML += `
+                    <button onclick="createIndividualBill(${idx})" class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 py-2 px-3 rounded-lg text-sm shadow-sm truncate">
+                        👤 บิลของ ${friend}
+                    </button>
+                `;
+            });
+        }
+
+        // --- Bill Generation Logic ---
+        
+        // 1. บิลรวม (Group Bill)
+        function createGroupBill() {
+            const total = items.reduce((sum, item) => sum + item.price, 0);
+            const count = friends.length || 1;
+            const avg = total / count;
+
+            billData = {
+                type: 'group',
+                targetName: 'ทุกคนในกลุ่ม (All Friends)',
+                itemsToDisplay: friends.map(f => ({ name: f, price: avg })), // รายการคือชื่อเพื่อนแต่ละคน
+                totalAmount: total, // ยอดโชว์รวม
+                qrAmount: avg // QR Code ให้จ่ายยอดหารเฉลี่ย (สะดวกคนสแกน)
+            };
+            refreshReceiptUI();
+            switchPage('receipt');
+        }
+
+        // 2. บิลแยก (Individual Bill)
+        function createIndividualBill(idx) {
+            const total = items.reduce((sum, item) => sum + item.price, 0);
+            const count = friends.length || 1;
+            const avg = total / count;
+
+            billData = {
+                type: 'individual',
+                targetName: friends[idx],
+                itemsToDisplay: [{ name: 'ส่วนแบ่งค่าใช้จ่าย (หารเฉลี่ย)', price: avg }],
+                totalAmount: avg,
+                qrAmount: avg
+            };
+            refreshReceiptUI();
+            switchPage('receipt');
+        }
+
+        // --- Receipt UI Logic ---
+        function refreshReceiptUI() {
+            const inputBiller = document.getElementById('input-biller').value;
+            const inputPP = document.getElementById('input-pp-id').value;
+            const inputDate = document.getElementById('input-date').value;
+
+            document.getElementById('display-biller').innerText = inputBiller || '-';
+            document.getElementById('display-target').innerText = billData.targetName;
+            document.getElementById('display-pp-id').innerText = inputPP || '-';
+            if(inputDate) document.getElementById('display-date').innerText = new Date(inputDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+
+            // Render Items Table
+            const tbody = document.getElementById('display-items');
+            tbody.innerHTML = '';
+            
+            if(billData.type === 'group') {
+                // กรณีบิลกลุ่ม: โชว์รายชื่อเพื่อน + ยอดที่ต้องจ่ายต่อคน
+                billData.itemsToDisplay.forEach(item => {
+                    tbody.innerHTML += `
+                        <tr class="border-b border-gray-50 last:border-0">
+                            <td class="py-1.5 pl-1">${item.name}</td>
+                            <td class="py-1.5 text-right">${item.price.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2})}</td>
+                        </tr>
+                    `;
+                });
+                // ยอดรวมด้านล่าง สำหรับบิลกลุ่ม ให้โชว์ว่าเป็นยอด "ตกคนละเท่าไหร่" หรือ "ยอดรวมทั้งหมด"
+                // เพื่อความไม่งง: กรณี Group Bill ยอด Total ในตารางเราอาจจะโชว์ยอดรวมบิลจริง แต่ QR ให้จ่ายยอดหาร
+                document.getElementById('display-total').innerText = billData.qrAmount.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2});
+                document.querySelector('tfoot td:first-child').innerText = "ยอดต้องโอนคนละ"; // เปลี่ยนข้อความ
+            } else {
+                // กรณีบิลเดี่ยว
+                billData.itemsToDisplay.forEach(item => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td class="py-2 pl-1">${item.name}</td>
+                            <td class="py-2 text-right">${item.price.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2})}</td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('display-total').innerText = billData.totalAmount.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2});
+                document.querySelector('tfoot td:first-child').innerText = "ยอดรวมสุทธิ";
+            }
+
+            // QR Code Generation
+            document.getElementById('display-qr-amount').innerText = billData.qrAmount.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2});
+            generateQR(inputPP, billData.qrAmount);
+        }
+
+        function generateQR(ppId, amount) {
+            const qrContainer = document.getElementById('qrcode-container');
+            const qrPlace = document.getElementById('qr-placeholder');
+            qrContainer.innerHTML = '';
+
+            if(ppId && amount > 0) {
+                qrPlace.classList.add('hidden');
+                qrContainer.classList.remove('hidden');
+                const payload = generatePromptPayPayload(ppId, amount);
+                new QRCode(qrContainer, { text: payload, width: 100, height: 100, correctLevel : QRCode.CorrectLevel.L });
+            } else {
+                qrContainer.classList.add('hidden');
+                qrPlace.classList.remove('hidden');
+            }
+        }
+
+        // --- Save Image Function (Mobile Friendly) ---
+        function downloadReceiptAsImage() {
+            const element = document.getElementById('receipt-paper'); // เลือกเฉพาะตัวกระดาษบิล
+            const btn = document.querySelector('button[onclick="downloadReceiptAsImage()"]');
+            const loading = document.getElementById('loading-overlay');
+            
+            loading.style.display = 'flex'; // Show loading
+
+            // ใช้ html2canvas
+            html2canvas(element, {
+                scale: 3, // เพิ่มความชัด (Scale 3x)
+                useCORS: true,
+                backgroundColor: "#ffffff", // บังคับพื้นหลังขาว
+                logging: false
+            }).then(canvas => {
+                // Create Image Link
+                const link = document.createElement('a');
+                link.download = `Bill-${Date.now()}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                link.click();
+                
+                loading.style.display = 'none'; // Hide loading
+            }).catch(err => {
+                console.error(err);
+                alert("เกิดข้อผิดพลาดในการบันทึกภาพ");
+                loading.style.display = 'none';
+            });
+        }
+
+        // --- PromptPay Logic Helper ---
+        function generatePromptPayPayload(target, amount) {
+            target = target.replace(/[^0-9]/g, '');
+            let targetType = target.length >= 13 ? '02' : '01';
+            if (targetType === '01' && target.startsWith('0')) target = '66' + target.substring(1);
+            
+            const f = (id, val) => id + ('00' + val.length).slice(-2) + val;
+            const crc16 = (data) => {
+                let crc = 0xFFFF;
+                for (let i = 0; i < data.length; i++) {
+                    let x = ((crc >> 8) ^ data.charCodeAt(i)) & 0xFF;
+                    x ^= x >> 4;
+                    crc = ((crc << 8) ^ (x << 12) ^ (x << 5) ^ x) & 0xFFFF;
+                }
+                return ('0000' + crc.toString(16).toUpperCase()).slice(-4);
+            };
+
+            let data = [
+                f('00', '01'), f('01', amount > 0 ? '12' : '11'),
+                f('29', f('00', 'A000000677010111') + f(targetType, target)),
+                f('58', 'TH'), f('53', '764'), f('54', parseFloat(amount).toFixed(2))
+            ];
+            let dataStr = data.join('') + '6304';
+            return dataStr + crc16(dataStr);
+        }
+
+    </script>
+</body>
+</html>
