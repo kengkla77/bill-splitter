@@ -236,7 +236,7 @@
         function removeCalcItem(idx) { items.splice(idx, 1); renderCalculator(); }
         
         function updateFriend(idx, val) { friends[idx] = val; calculateAndRenderButtons(); }
-        function addFriend() { friends.push(`เพื่อน ${friends.length + 1}`); renderCalculator(); }
+        function addFriend() { friends.push(``); renderCalculator(); }
         function removeFriend(idx) { friends.splice(idx, 1); renderCalculator(); }
 
         function calculateAndRenderButtons() {
@@ -416,4 +416,5 @@
 
     </script>
 </body>
+
 </html>
