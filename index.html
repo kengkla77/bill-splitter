@@ -454,7 +454,11 @@
         function generatePromptPayPayload(target, amount) {
             target = target.replace(/[^0-9]/g, '');
             let targetType = target.length >= 13 ? '02' : '01';
-            if (targetType === '01' && target.startsWith('0')) target = '66' + target.substring(1);
+            // FIX: mobile numbers must be encoded as "0066" + 9-digit number (13 chars total),
+            // not just "66" + 9-digit number (11 chars). The old 11-char version fails the
+            // length check that most banking apps' QR readers perform, so any PromptPay ID
+            // starting with 0 (a mobile number) produced a QR that wouldn't scan.
+            if (targetType === '01' && target.startsWith('0')) target = '0066' + target.substring(1);
             const f = (id, val) => id + ('00' + val.length).slice(-2) + val;
             const crc16 = (data) => {
                 let crc = 0xFFFF;
